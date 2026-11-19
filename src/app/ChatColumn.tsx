@@ -95,21 +95,29 @@ function Messages(props: { msgs: MessageDoc[] }) {
   );
 }
 
-function Composer(props: { placeholder: string; onSend: (t: string) => Promise<unknown> | void; label?: string; autofocus?: boolean }) {
+function Composer(props: { placeholder: string; onSend: (t: string) => Promise<unknown> | void; onAdd?: (t: string) => Promise<unknown> | void; label?: string; autofocus?: boolean }) {
   const [draft, setDraft] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   let ta!: HTMLTextAreaElement;
-  const send = async () => {
+  const submit = async (fn: (t: string) => Promise<unknown> | void) => {
     const t = draft().trim(); if (!t || busy()) return;
     setBusy(true);
-    try { await props.onSend(t); setDraft(""); ta.value = ""; } finally { setBusy(false); }
+    try { await fn(t); setDraft(""); ta.value = ""; } finally { setBusy(false); }
   };
   return (
     <div class="composer">
       <textarea ref={el => { ta = el; if (props.autofocus) setTimeout(() => el.focus(), 0); }} placeholder={props.placeholder} rows={3}
         onInput={e => setDraft(e.currentTarget.value)}
-        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } }} />
-      <div class="composer-bar"><span class="muted">Ctrl+Enter to send</span><button class="btn-small btn-final" disabled={busy() || !draft().trim()} onClick={send}>{props.label ?? "Send"}</button></div>
+        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(props.onSend); } }} />
+      <div class="composer-bar">
+        <span class="muted" title="Send asks Claude now. Add saves the comment for the next review.">{props.onAdd ? "Add waits for the next review" : "Ctrl+Enter to send"}</span>
+        <span class="btns">
+          <Show when={props.onAdd}>
+            <button class="btn-small" disabled={busy() || !draft().trim()} onClick={() => submit(props.onAdd!)} title="Save without asking Claude now">Add</button>
+          </Show>
+          <button class="btn-small btn-final" disabled={busy() || !draft().trim()} onClick={() => submit(props.onSend)} title="Save and ask Claude now (Ctrl+Enter)">{props.label ?? "Send"}</button>
+        </span>
+      </div>
     </div>
   );
 }
@@ -127,7 +135,7 @@ function Thread(props: { app: AppState; thread: string; placeholder: string }) {
   return (
     <div class="thread">
       <Messages msgs={msgs()} />
-      <Composer placeholder={props.placeholder} onSend={send} />
+      <Composer placeholder={props.placeholder} onSend={send} onAdd={t => props.app.sendMessage(props.thread, t)} />
     </div>
   );
 }
@@ -136,6 +144,15 @@ const chatWakeText = (where: string, id: string, text: string) =>
   `Workbench chat: new message in ${where} (message ${id}). Answer only this message in the workbench; no review.\n\n"${text.length > 300 ? text.slice(0, 297) + "…" : text}"`;
 
 function NewThread(props: { app: AppState; ui: Ui; quote: string; refLabel: string }) {
+  const start = async (t: string, wake: boolean) => {
+    const d = props.ui.ui.draft; if (!d) return;
+    const tid = props.app.newId(), mid = props.app.newId();
+    // wake first, while the click still counts as the viewer's gesture
+    const woke = wake ? props.app.notifier.wake("chat", chatWakeText(`a new comment thread on ${d.ref} (thread ${tid})`, mid, t)) : Promise.resolve(false);
+    const id = await props.app.createThread(d.ref, d.from, d.to, d.quote, t, tid, mid);
+    props.ui.setUi(s => { s.draft = null; s.activeThread = id; });
+    await woke;
+  };
   return (
     <div class="thread">
       <div class="quote-box">
@@ -145,14 +162,8 @@ function NewThread(props: { app: AppState; ui: Ui; quote: string; refLabel: stri
           <button class="btn-quiet" onClick={() => props.ui.setUi(s => { s.draft = null; })}>Cancel</button></div>
       </div>
       <div class="msgs" />
-      <Composer placeholder="What should Claude look at here?" label="Start thread" autofocus onSend={async t => {
-        const d = props.ui.ui.draft; if (!d) return;
-        const tid = props.app.newId(), mid = props.app.newId();
-        const woke = props.app.notifier.wake("chat", chatWakeText(`a new comment thread on ${d.ref} (thread ${tid})`, mid, t));
-        const id = await props.app.createThread(d.ref, d.from, d.to, d.quote, t, tid, mid);
-        props.ui.setUi(s => { s.draft = null; s.activeThread = id; });
-        await woke;
-      }} />
+      <Composer placeholder="What should Claude look at here?" autofocus
+        onSend={t => start(t, true)} onAdd={t => start(t, false)} />
     </div>
   );
 }
