@@ -46,7 +46,7 @@ export function ChatColumn(props: { app: AppState; ui: Ui }) {
           <label class="toggle"><input type="checkbox" checked={ui().showResolved} onChange={e => props.ui.setUi(s => { s.showResolved = e.currentTarget.checked; })} /> resolved</label>
         </div>
         <Show when={ui().draft} fallback={
-          <Show when={active()} fallback={<div class="hint"><p>Select text in a paragraph and press <b>Comment</b> to start a thread anchored to it.</p><p>Use ◀ ▶ to step through threads in reading order.</p></div>}>
+          <Show when={active()} fallback={<div class="hint"><p>Select text in a paragraph, then click the <b>💬 Comment</b> button that appears beside it (or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>). A box to type your comment opens here.</p><p>Use ◀ ▶ to step through threads in reading order.</p></div>}>
             {t => (
               <>
                 <div class="quote-box">

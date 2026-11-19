@@ -66,6 +66,8 @@ kbd { font: 11px var(--ui); border: 1px solid var(--line2); border-bottom-width:
 .seg.st-rewritten { border-left-color: var(--c-rewritten); }
 .seg.st-finalized { border-left-color: var(--c-finalized); }
 .seg.st-committed { border-left-color: var(--c-committed); }
+.seg { position: relative; }
+.float-comment { position: absolute; z-index: 5; border: none; background: var(--accent); color: #fff !important; font-weight: 500; font-size: 12.5px; padding: 4px 10px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 .seg-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .seg-bar .btn-quiet { padding: 2px 6px; }
 .seg-ref { font: 600 12px var(--ui); color: var(--ink2); margin-right: 4px; font-variant-numeric: tabular-nums; }

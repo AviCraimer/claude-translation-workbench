@@ -32,7 +32,9 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
   const [showDiff, setShowDiff] = createSignal(false);
   const [heOpen, setHeOpen] = createSignal<boolean | null>(null);
   const [text, setText] = createSignal(props.app.currentText(props.seg.ref));
+  const [floatAt, setFloatAt] = createSignal<{ x: number; y: number } | null>(null);
   let host!: HTMLDivElement;
+  let card!: HTMLElement;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   const ref = () => props.seg.ref;
@@ -61,8 +63,17 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
           saveTimer = setTimeout(() => props.app.saveText(props.seg.ref, t), 700);
         },
         onLookup: (pos, t) => props.ui.lookup(props.seg.ref, pos, t),
-        onSelect: (from, to) => props.ui.setUi(s => { s.selection = { ref: props.seg.ref, from, to }; }),
+        onSelect: (from, to) => {
+          props.ui.setUi(s => { s.selection = { ref: props.seg.ref, from, to }; });
+          if (to <= from) { setFloatAt(null); return; }
+          // place a floating Comment button just above the end of the selection
+          requestAnimationFrame(() => {
+            const c = editor()?.view.coordsAtPos(to), r = card.getBoundingClientRect();
+            if (c) setFloatAt({ x: Math.max(8, Math.min(c.left - r.left - 50, r.width - 120)), y: c.top - r.top - 32 });
+          });
+        },
         onThreadClick: id => props.ui.openThread(id),
+        onCommentKey: () => { setFloatAt(null); props.ui.startComment(); },
       });
       props.ui.editors.set(props.seg.ref, ed);
       setEditor(ed);
@@ -89,7 +100,14 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
   );
 
   return (
-    <section class={["seg", "st-" + status()]} id={"seg-" + props.seg.ref.replace(/:/g, "-")}>
+    <section ref={card} class={["seg", "st-" + status()]} id={"seg-" + props.seg.ref.replace(/:/g, "-")}>
+      <Show when={hasSelection() && floatAt()}>
+        {p => (
+          <button class="float-comment" style={{ left: p().x + "px", top: p().y + "px" }}
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => { setFloatAt(null); props.ui.startComment(); }}>💬 Comment</button>
+        )}
+      </Show>
       <div class="seg-bar">
         <span class="seg-ref">{props.seg.ref}</span>
         <span class={["chip", "chip-" + status()]}>{STATUS_LABEL[status()]}</span>
@@ -99,7 +117,7 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
         <span class="spacer" />
         <button class={["btn-quiet", { on: heVisible() }]} onClick={() => setHeOpen(!heVisible())} title="Show or hide the Hebrew">Hebrew</button>
         <button class={["btn-quiet", { on: showDiff() }]} onClick={() => setShowDiff(!showDiff())}>Changes</button>
-        <button class="btn-quiet" disabled={!hasSelection()} onClick={() => props.ui.startComment()} title="Select text in this paragraph first">Comment</button>
+        <button class="btn-quiet" disabled={!hasSelection()} onClick={() => props.ui.startComment()} title="Select text in this paragraph first (Ctrl+Alt+M)">Comment</button>
         <Show when={status() !== "committed"}>
           <button class={["btn-small", status() === "finalized" ? "btn-undo" : "btn-final"]} disabled={problems().length > 0}
             onClick={() => props.app.setFinalized(props.seg.ref, status() !== "finalized")}>

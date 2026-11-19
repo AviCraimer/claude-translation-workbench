@@ -77,6 +77,7 @@ export interface SegmentEditorOpts {
   onLookup: (pos: number, text: string) => void;
   onSelect: (from: number, to: number) => void;
   onThreadClick: (id: string) => void;
+  onCommentKey: () => void;
 }
 
 export function createSegmentEditor(o: SegmentEditorOpts) {
@@ -104,6 +105,7 @@ export function createSegmentEditor(o: SegmentEditorOpts) {
         history(),
         keymap.of([
           { key: "Mod-d", preventDefault: true, run: v => { o.onLookup(v.state.selection.main.head, v.state.doc.toString()); return true; } },
+          { key: "Mod-Alt-m", preventDefault: true, run: () => { o.onCommentKey(); return true; } },
           ...defaultKeymap, ...historyKeymap,
         ]),
         EditorView.lineWrapping,
