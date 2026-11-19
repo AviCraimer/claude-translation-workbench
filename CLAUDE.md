@@ -76,4 +76,4 @@ Run `npm run build`. Then `publish_files` with `dist/index.html` and the new `di
 ## Known pitfalls
 - Snapshot data from `db` is frozen. Clone it (`structuredClone`) before mutating.
 - In Solid 2.0, signal reads lag writes until the next microtask. Pass values along instead of re-reading a signal you just set.
-- Publishing with `deliver: "send"` / `sendToClaudeSession` doesn't reach a mobile viewer, so the optional Notify Claude button uses `comments.sendToClaude`, which wakes the session that published the artifact.
+- `room.sendToClaudeSession` needs a chat open beside the artifact, and it failed on mobile. So the optional Notify Claude button uses `comments.sendToClaude` instead, which wakes only the session that published the artifact. The normal way to call Claude is the chat.
