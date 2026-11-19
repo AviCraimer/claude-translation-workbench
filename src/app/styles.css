@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --paper: #f7f4ee; --panel: #fbfaf7; --card: #ffffff; --ink: #1f1c18; --ink2: #4b453d; --mut: #8a8277;
   --line: #e6e0d5; --line2: #d8d0c2;
   --accent: #8c2f39; --accent-soft: #f3e3e3;
@@ -14,6 +15,8 @@ html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink
 #root, .shell { height: 100%; }
 .shell { display: flex; flex-direction: column; min-width: 1024px; }
 button { font: inherit; cursor: pointer; }
+input, select, textarea, button { color: var(--ink); }
+textarea::placeholder { color: var(--mut); }
 button:disabled { cursor: default; opacity: .45; }
 kbd { font: 11px var(--ui); border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--card); }
 .spacer { flex: 1; }
