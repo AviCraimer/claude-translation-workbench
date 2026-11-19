@@ -57,6 +57,8 @@ The page wakes the session that published the artifact by posting an artifact co
 - **`Workbench chat: new message in … (message <id>)`**: answer only that message. Read `messages` (and the thread document if it names one), write one `messages/<id>` reply from Claude, and run no review.
 - **`Workbench review: …`**: run the full review below.
 
+Before suggesting any English wording, in a chat answer or a review, check the project's lexicon (`tools/lexicon_digest.py`, `--entry KEY`) and conventions first. Don't fall back on standard Bible or reference translations. If a term has no ruling, say so, offer candidates with your preference, and offer to add it to the project's list of terms to rule on.
+
 The artifact comment tools can't see these relay threads ("not found"). Answer in the workbench, and put one short line in the session.
 
 ### "Check the workbench" (review)
