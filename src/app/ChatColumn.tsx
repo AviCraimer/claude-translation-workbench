@@ -71,7 +71,8 @@ export function ChatColumn(props: { app: AppState; ui: Ui }) {
         <Show when={waiting()} fallback={<span class="muted">Nothing waiting for Claude.</span>}>
           <span><b>{waiting()}</b> waiting for Claude.</span>
         </Show>
-        <NotifyButton app={props.app} />
+        <ReviewButton app={props.app} />
+        <Show when={props.app.notifier.status()}><div class="wake-status muted small">{props.app.notifier.status()}</div></Show>
       </footer>
     </aside>
   );
@@ -115,13 +116,24 @@ function Composer(props: { placeholder: string; onSend: (t: string) => Promise<u
 
 function Thread(props: { app: AppState; thread: string; placeholder: string }) {
   const msgs = createMemo(() => props.app.messagesOf(props.thread));
+  const send = (t: string) => {
+    const id = props.app.newId();
+    const t0 = props.app.live.threads[props.thread];
+    const where = props.thread === "general" ? "the General chat" : `the comment thread on ${t0?.ref ?? "?"} (thread ${props.thread})`;
+    // wake first, while the click still counts as the viewer's gesture
+    const woke = props.app.notifier.wake("chat", chatWakeText(where, id, t));
+    return Promise.all([woke, props.app.sendMessage(props.thread, t, id)]);
+  };
   return (
     <div class="thread">
       <Messages msgs={msgs()} />
-      <Composer placeholder={props.placeholder} onSend={t => props.app.sendMessage(props.thread, t)} />
+      <Composer placeholder={props.placeholder} onSend={send} />
     </div>
   );
 }
+
+const chatWakeText = (where: string, id: string, text: string) =>
+  `Workbench chat: new message in ${where} (message ${id}). Answer only this message in the workbench; no review.\n\n"${text.length > 300 ? text.slice(0, 297) + "…" : text}"`;
 
 function NewThread(props: { app: AppState; ui: Ui; quote: string; refLabel: string }) {
   return (
@@ -135,33 +147,23 @@ function NewThread(props: { app: AppState; ui: Ui; quote: string; refLabel: stri
       <div class="msgs" />
       <Composer placeholder="What should Claude look at here?" label="Start thread" autofocus onSend={async t => {
         const d = props.ui.ui.draft; if (!d) return;
-        const id = await props.app.createThread(d.ref, d.from, d.to, d.quote, t);
+        const tid = props.app.newId(), mid = props.app.newId();
+        const woke = props.app.notifier.wake("chat", chatWakeText(`a new comment thread on ${d.ref} (thread ${tid})`, mid, t));
+        const id = await props.app.createThread(d.ref, d.from, d.to, d.quote, t, tid, mid);
         props.ui.setUi(s => { s.draft = null; s.activeThread = id; });
+        await woke;
       }} />
     </div>
   );
 }
 
-/** Optional: post an artifact comment that wakes the Claude session that published this page. */
-function NotifyButton(props: { app: AppState }) {
-  const [avail, setAvail] = createSignal<string>("off");
-  const [msg, setMsg] = createSignal("");
-  const c = props.app.platform.comments;
-  const check = () => { if (c?.canSendToClaude) c.canSendToClaude().then((v: string) => setAvail(v)).catch(() => setAvail("off")); };
-  onSettled(() => { check(); });
-  let btn!: HTMLButtonElement;
-  const notify = async () => {
-    setMsg("Sending…");
-    try {
-      const anchor = await c.anchorFor(btn);
-      await c.sendToClaude({ anchor, text: "Workbench: please check new edits and comments waiting for you." });
-      setMsg("Sent — Claude will reply in these threads.");
-    } catch (e: any) { setMsg("Couldn't notify (" + (e?.code || e) + "). Tell Claude in your chat instead."); check(); }
-  };
+/** Wakes Claude for a full review of changes (artifact comment -> publishing session). */
+function ReviewButton(props: { app: AppState }) {
+  const n = props.app.notifier;
+  onSettled(() => { n.check(); });
   return (
-    <Show when={avail() === "available"} fallback={<span class="muted small">Tell Claude in your chat: “check the workbench”.</span>}>
-      <button ref={btn} class="btn-small" onClick={notify}>Notify Claude</button>
-      <Show when={msg()}><span class="muted small">{msg()}</span></Show>
+    <Show when={n.avail() === "available"} fallback={<span class="muted small">To reach Claude, use your chat: “check the workbench”.</span>}>
+      <button ref={el => n.setAnchor(el)} class="btn-small btn-final" onClick={() => n.wake("review", "Workbench review: please run a full review of the changes (new rewrites and waiting threads).")}>Claude Review Changes</button>
     </Show>
   );
 }

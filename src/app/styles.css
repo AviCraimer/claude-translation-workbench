@@ -145,6 +145,7 @@ summary { cursor: pointer; color: var(--ink2); }
 .composer { border-top: 1px solid var(--line); padding: 8px 10px; }
 .composer textarea { width: 100%; resize: vertical; font: 14px/1.4 var(--serif); padding: 7px 9px; border: 1px solid var(--line2); border-radius: 6px; background: var(--card); }
 .composer-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 12px; }
+.wake-status { flex-basis: 100%; }
 .chat-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; }
 
 @media (max-width: 1180px) {

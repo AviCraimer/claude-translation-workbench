@@ -15,6 +15,7 @@ import type { ChapterBundle, LexiconBundle, Manifest, Segment } from "../core/fo
 import { checkEditable } from "../core/markup";
 import type { Platform } from "./platform";
 import { buildIndex, type LexIndex } from "./lexicon";
+import { createNotifier } from "./notify";
 
 export interface EditDoc { ref: string; unit: string; text: string; baseHash: string; rev: number; finalized?: boolean; finalizedRev?: number; updatedAt?: string }
 export interface ReviewDoc { ref: string; rev: number; verdict: "ok" | "issues"; summary?: string; at?: string }
@@ -30,6 +31,7 @@ const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2
 
 export function createAppState(platform: Platform) {
   const db = platform.db;
+  const notifier = createNotifier(platform.comments);
   const [manifest, setManifest] = createSignal<Manifest | null>(null);
   const [unitId, setUnitId] = createSignal<string | null>(null);
   const [bundle, setBundle] = createSignal<ChapterBundle | null>(null);
@@ -162,21 +164,19 @@ export function createAppState(platform: Platform) {
   const messagesOf = (thread: string) => live.messages.filter(m => m.thread === thread);
   const awaitingClaude = (thread: string) => { const ms = messagesOf(thread); return ms.length > 0 && ms[ms.length - 1].by === "human"; };
 
-  async function sendMessage(thread: string, text: string) {
+  async function sendMessage(thread: string, text: string, id: string = newId()) {
     if (!db || !text.trim()) return;
-    const id = newId();
     const m: MessageDoc = { id, thread, by: "human", text: text.trim(), at: now() };
     setLive(s => { s.messages.push(m); });
     await db.doc("messages/" + id).set({ thread, by: "human", text: m.text, at: m.at });
   }
-  async function createThread(ref: string, from: number, to: number, quote: string, firstMessage: string): Promise<string | null> {
+  async function createThread(ref: string, from: number, to: number, quote: string, firstMessage: string, id: string = newId(), msgId?: string): Promise<string | null> {
     if (!db) return null;
-    const id = newId();
     const t: ThreadDoc = { id, kind: "anchor", unit: unitId()!, ref, from, to, quote, resolved: false, createdBy: "human", createdAt: now() };
     setLive(s => { s.threads[id] = t; });
     const { id: _omit, ...data } = t;
     await db.doc("threads/" + id).set(data);
-    await sendMessage(id, firstMessage);
+    await sendMessage(id, firstMessage, msgId);
     return id;
   }
   async function setResolved(id: string, resolved: boolean) {
@@ -193,7 +193,7 @@ export function createAppState(platform: Platform) {
   }
 
   return {
-    platform, manifest, unitId, bundle, lexIndex, loadError, dbState, live, saveErrors,
+    platform, notifier, newId, manifest, unitId, bundle, lexIndex, loadError, dbState, live, saveErrors,
     loadStatic, openUnit, subscribe, currentText, saveText, setFinalized, statusOf, reviewOf, problemsOf,
     threadsForUnit, messagesOf, awaitingClaude, sendMessage, createThread, setResolved, moveAnchor,
   };

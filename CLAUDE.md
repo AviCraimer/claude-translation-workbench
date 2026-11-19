@@ -52,6 +52,13 @@ The General chat is thread id `general`, and it has no thread document. A review
 ### Update the app
 Run `npm run build`. Then `publish_files` with `dist/index.html` and the new `dist/assets/*`, and pass the old hashed asset names in `remove`.
 
+### Wakes from the page
+The page wakes the session that published the artifact by posting an artifact comment (`comments.sendToClaude`). It arrives as an `[Artifact comment sent to Claude]` turn. There are two kinds:
+- **`Workbench chat: new message in … (message <id>)`**: answer only that message. Read `messages` (and the thread document if it names one), write one `messages/<id>` reply from Claude, and run no review.
+- **`Workbench review: …`**: run the full review below.
+
+The artifact comment tools can't see these relay threads ("not found"). Answer in the workbench, and put one short line in the session.
+
 ### "Check the workbench" (review)
 1. `db_list` the `edits`, `reviews`, `threads` and `messages` collections.
 2. Pending review means an edit whose text differs from the bundle text and has no review with the same `rev`. Waiting means a thread whose last message is human (include `general`).
@@ -76,4 +83,4 @@ Run `npm run build`. Then `publish_files` with `dist/index.html` and the new `di
 ## Known pitfalls
 - Snapshot data from `db` is frozen. Clone it (`structuredClone`) before mutating.
 - In Solid 2.0, signal reads lag writes until the next microtask. Pass values along instead of re-reading a signal you just set.
-- `room.sendToClaudeSession` needs a chat open beside the artifact, and it failed on mobile. So the optional Notify Claude button uses `comments.sendToClaude` instead, which wakes only the session that published the artifact. The normal way to call Claude is the chat.
+- `room.sendToClaudeSession` needs a chat open beside the artifact, and it failed on mobile. Wakes use `comments.sendToClaude` instead (see "Wakes from the page"), which reaches only the session that published the artifact. If a different chat takes over, it should republish the artifact so that wakes reach it.
