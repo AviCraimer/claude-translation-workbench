@@ -14,7 +14,7 @@ export function createUi(app: AppState) {
     activeThread: null as string | null,
     draft: null as Draft | null,
     showHebrew: true,
-    showResolved: false,
+    commentView: "open" as "open" | "resolved",
     selection: null as { ref: string; from: number; to: number } | null,
   });
   const editors = new Map<string, SegmentEditor>();

@@ -10,11 +10,30 @@ const fmtTime = (iso: string) => {
 
 export function ChatColumn(props: { app: AppState; ui: Ui }) {
   const ui = () => props.ui.ui;
-  const visibleThreads = createMemo(() => props.app.threadsForUnit().filter(t => ui().showResolved || !t.resolved));
+  const viewingResolved = () => ui().commentView === "resolved";
+  const visibleThreads = createMemo(() => props.app.threadsForUnit().filter(t => !!t.resolved === viewingResolved()));
   const openCount = createMemo(() => props.app.threadsForUnit().filter(t => !t.resolved).length);
+  const resolvedCount = createMemo(() => props.app.threadsForUnit().filter(t => !!t.resolved).length);
   const waiting = createMemo(() => props.app.threadsForUnit().filter(t => !t.resolved && props.app.awaitingClaude(t.id)).length + (props.app.awaitingClaude("general") ? 1 : 0));
   const index = createMemo(() => visibleThreads().findIndex(t => t.id === ui().activeThread));
-  const active = createMemo(() => (ui().activeThread ? props.app.live.threads[ui().activeThread!] : undefined));
+  // the open thread, if it belongs to the current view
+  const active = createMemo(() => {
+    const t = ui().activeThread ? props.app.live.threads[ui().activeThread!] : undefined;
+    return t && !!t.resolved === viewingResolved() ? t : undefined;
+  });
+  const setView = (v: "open" | "resolved") => {
+    const first = props.app.threadsForUnit().find(t => !!t.resolved === (v === "resolved"));
+    props.ui.setUi(s => { s.commentView = v; s.activeThread = null; s.draft = null; });
+    if (first) props.ui.openThread(first.id);
+  };
+  // tick "Resolved" (or untick it in the resolved view): the thread leaves this view, so move on to its neighbour
+  const toggleResolved = (id: string, resolved: boolean) => {
+    const list = visibleThreads(), i = list.findIndex(t => t.id === id);
+    const next = list[i + 1] ?? list[i - 1];
+    props.app.setResolved(id, resolved);
+    if (next && next.id !== id) props.ui.openThread(next.id);
+    else props.ui.setUi(s => { s.activeThread = null; });
+  };
 
   const step = (d: number) => {
     const list = visibleThreads(); if (!list.length) return;
@@ -43,10 +62,17 @@ export function ChatColumn(props: { app: AppState; ui: Ui }) {
           <button class="btn-quiet" onClick={() => step(-1)} disabled={!visibleThreads().length}>◀</button>
           <span>{visibleThreads().length ? `${index() >= 0 ? index() + 1 : "–"} of ${visibleThreads().length}` : "No comments"}</span>
           <button class="btn-quiet" onClick={() => step(1)} disabled={!visibleThreads().length}>▶</button>
-          <label class="toggle"><input type="checkbox" checked={ui().showResolved} onChange={e => props.ui.setUi(s => { s.showResolved = e.currentTarget.checked; })} /> resolved</label>
+          <div class="view-switch" title="Which comments to show">
+            <span class="muted small">View</span>
+            <button class={{ on: !viewingResolved() }} onClick={() => setView("open")}>Open {openCount()}</button>
+            <button class={{ on: viewingResolved() }} onClick={() => setView("resolved")}>Resolved {resolvedCount()}</button>
+          </div>
         </div>
+        <Show when={viewingResolved()}>
+          <div class="resolved-banner">Showing resolved comments. <button class="btn-link" onClick={() => setView("open")}>Back to open comments</button></div>
+        </Show>
         <Show when={ui().draft} fallback={
-          <Show when={active()} fallback={<div class="hint"><p>Select text in a paragraph, then click the <b>💬 Comment</b> button that appears beside it (or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>). A box to type your comment opens here.</p><p>Use ◀ ▶ to step through threads in reading order.</p></div>}>
+          <Show when={active()} fallback={<div class="hint"><p>Select text in a paragraph, then click the <b>💬 Comment</b> button that appears beside it (or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>). A box to type your comment opens here.</p><Show when={viewingResolved()} fallback={<></>}><p>No resolved thread selected.</p></Show><p>Use ◀ ▶ to step through threads in reading order.</p></div>}>
             {t => (
               <>
                 <div class="quote-box">
@@ -55,7 +81,9 @@ export function ChatColumn(props: { app: AppState; ui: Ui }) {
                   <div class="thread-actions">
                     <Show when={props.app.awaitingClaude(t().id)}><span class="chip chip-wait">Waiting for Claude</span></Show>
                     <span class="spacer" />
-                    <button class="btn-quiet" onClick={() => props.app.setResolved(t().id, !t().resolved)}>{t().resolved ? "Reopen" : "Resolve"}</button>
+                    <label class="resolve-check" title="Resolved threads leave this list and lose their highlight">
+                      <input type="checkbox" checked={!!t().resolved} onChange={e => toggleResolved(t().id, e.currentTarget.checked)} /> Resolved
+                    </label>
                   </div>
                 </div>
                 <Thread app={props.app} thread={t().id} placeholder="Reply…" />

@@ -52,7 +52,7 @@ function buildDecorations(doc: string, tokens: Map<number, Token>): DecorationSe
   return Decoration.set(ranges, true);
 }
 
-export interface CommentRange { id: string; from: number; to: number; active: boolean }
+export interface CommentRange { id: string; from: number; to: number; active: boolean; resolved?: boolean }
 const setComments = StateEffect.define<CommentRange[]>();
 const commentField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -61,7 +61,7 @@ const commentField = StateField.define<DecorationSet>({
     for (const e of tr.effects) if (e.is(setComments)) {
       const b = new RangeSetBuilder<Decoration>();
       const sorted = [...e.value].filter(r => r.to > r.from && r.to <= tr.state.doc.length).sort((a, c) => a.from - c.from);
-      for (const r of sorted) b.add(r.from, r.to, Decoration.mark({ class: r.active ? "cm-comment cm-comment-active" : "cm-comment", attributes: { "data-thread": r.id } }));
+      for (const r of sorted) b.add(r.from, r.to, Decoration.mark({ class: "cm-comment" + (r.resolved ? " cm-comment-resolved" : "") + (r.active ? " cm-comment-active" : ""), attributes: { "data-thread": r.id } }));
       deco = b.finish();
     }
     return deco;

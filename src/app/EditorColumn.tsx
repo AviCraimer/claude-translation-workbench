@@ -41,7 +41,8 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
   const status = createMemo(() => props.app.statusOf(ref()));
   const review = createMemo(() => props.app.reviewOf(ref()));
   const problems = createMemo(() => props.app.problemsOf(ref()));
-  const threads = createMemo(() => props.app.threadsForUnit().filter(t => t.ref === ref() && (props.ui.ui.showResolved || !t.resolved)));
+  // open view: highlight open threads only; resolved view: resolved ones only
+  const threads = createMemo(() => props.app.threadsForUnit().filter(t => t.ref === ref() && !!t.resolved === (props.ui.ui.commentView === "resolved")));
   const hasSelection = createMemo(() => { const s = props.ui.ui.selection; return !!s && s.ref === ref() && s.to > s.from; });
   const heVisible = () => heOpen() ?? props.ui.ui.showHebrew;
   const diff = createMemo(() => (showDiff() ? wordDiff(props.seg.target.text, text()) : null));
@@ -68,7 +69,9 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
           if (to <= from) { setFloatAt(null); return; }
           // place a floating Comment button just above the end of the selection
           requestAnimationFrame(() => {
-            const c = editor()?.view.coordsAtPos(to), r = card.getBoundingClientRect();
+            const v = editor()?.view;
+            if (!v?.hasFocus) { setFloatAt(null); return; } // only for the viewer's own selections
+            const c = v.coordsAtPos(to), r = card.getBoundingClientRect();
             if (c) setFloatAt({ x: Math.max(8, Math.min(c.left - r.left - 50, r.width - 120)), y: c.top - r.top - 32 });
           });
         },
@@ -90,7 +93,7 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
 
   // keep highlights in step with this segment's threads
   createEffect(
-    () => ({ ed: editor(), ranges: threads().map(t => ({ id: t.id, from: t.from, to: t.to, active: t.id === props.ui.ui.activeThread })) }),
+    () => ({ ed: editor(), ranges: threads().map(t => ({ id: t.id, from: t.from, to: t.to, active: t.id === props.ui.ui.activeThread, resolved: !!t.resolved })) }),
     ({ ed, ranges }) => { ed?.setComments(ranges); },
   );
   // text written elsewhere (another tab or device)
