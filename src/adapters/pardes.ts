@@ -133,8 +133,8 @@ export function createPardesAdapter(repo: string): ProjectAdapter {
       const readers = RD.entries || {};
       const entries: LexEntry[] = [];
       for (const [key, e] of Object.entries<any>(LEX.entries)) {
+        // hidden entries are hidden from the reader site, not from the translator: keep them
         const rd = readers[key] || {};
-        if (rd.hidden === true) continue;
         const forms = Object.entries<any>(e.surfaceForms || {}).map(([form, v]) => ({ form, rendering: v?.rendering || v?.prefer || undefined }));
         const terms = new Set<string>();
         splitTerms(e.rendering).forEach(t => terms.add(t));
