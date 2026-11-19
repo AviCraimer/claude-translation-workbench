@@ -23,7 +23,7 @@ export interface CommitDoc { ref: string; rev: number; sha: string; at?: string 
 export interface ThreadDoc { id: string; kind: "anchor"; unit: string; ref: string; from: number; to: number; quote: string; resolved?: boolean; createdBy: "human" | "claude"; createdAt: string }
 export interface MessageDoc { id: string; thread: string; by: "human" | "claude"; text: string; at: string }
 
-export type Status = "untouched" | "rewritten" | "finalized" | "committed";
+export type Status = "untouched" | "rewritten" | "finalized" | "committed" | "review" | "conflict";
 
 export const refKey = (ref: string) => ref.replace(/:/g, ".");
 const now = () => new Date().toISOString();
@@ -110,43 +110,67 @@ export function createAppState(platform: Platform) {
   }
 
   const segOf = (ref: string): Segment | undefined => bundle()?.segments.find(s => s.ref === ref);
-  /** Latest text for a segment: local pending > database > bundle. */
-  function currentText(ref: string): string {
-    return pending.get(ref)?.text ?? live.edits[ref]?.text ?? segOf(ref)?.target.text ?? "";
+
+  /** The edit that applies to the text now loaded:
+   *  - an edit made on this base text applies;
+   *  - an older-base edit that was committed is history (the repo now has it): ignored;
+   *  - an older-base edit that was NOT committed is a conflict: the repo changed under it. */
+  function editFor(ref: string): { edit: EditDoc; stale: boolean } | null {
+    const seg = segOf(ref);
+    const e = pending.get(ref) ?? live.edits[ref];
+    if (!e || !seg) return null;
+    if (e.baseHash === seg.baseHash) return { edit: e, stale: false };
+    const c = live.commits[ref];
+    if (c && c.rev === e.rev) return null;
+    return { edit: e, stale: true };
   }
+  /** Latest text for a segment: the applicable edit (pending or saved), else the bundle text. */
+  function currentText(ref: string): string {
+    return editFor(ref)?.edit.text ?? segOf(ref)?.target.text ?? "";
+  }
+  /** Text of the saved edit, for syncing other tabs; null when no edit applies. */
+  const savedEditText = (ref: string): string | null => {
+    const seg = segOf(ref), e = live.edits[ref];
+    if (!seg || !e) return null;
+    const c = live.commits[ref];
+    return e.baseHash === seg.baseHash || !(c && c.rev === e.rev) ? e.text : null;
+  };
+  const lastRev = (ref: string) => (pending.get(ref) ?? live.edits[ref])?.rev ?? 0;
   function saveText(ref: string, text: string) {
     const seg = segOf(ref); if (!seg) return;
-    const prev = pending.get(ref) ?? live.edits[ref];
-    const doc: EditDoc = {
-      ref, unit: unitId()!, text, baseHash: seg.baseHash,
-      rev: (prev?.rev ?? 0) + 1, finalized: false, updatedAt: now(),
-    };
+    const doc: EditDoc = { ref, unit: unitId()!, text, baseHash: seg.baseHash, rev: lastRev(ref) + 1, finalized: false, updatedAt: now() };
     setLive(s => { s.edits[ref] = doc; });
     queueWrite(ref, doc);
   }
+  /** Finalize (approve) the current text, or unfinalize. Approving unchanged repo text is allowed:
+   *  that is how a paragraph changed by someone else gets re-approved. */
   function setFinalized(ref: string, on: boolean) {
     const seg = segOf(ref); if (!seg) return;
-    const prev = pending.get(ref) ?? live.edits[ref];
-    const text = prev?.text ?? seg.target.text;
-    const doc: EditDoc = { ref, unit: unitId()!, text, baseHash: seg.baseHash, rev: (prev?.rev ?? 0) + (prev ? 0 : 1), finalized: on, updatedAt: now() };
+    const cur = editFor(ref);
+    const sameRev = cur && !cur.stale;
+    const doc: EditDoc = { ref, unit: unitId()!, text: currentText(ref), baseHash: seg.baseHash, rev: sameRev ? cur!.edit.rev : lastRev(ref) + 1, finalized: on, updatedAt: now() };
     if (on) doc.finalizedRev = doc.rev;
     setLive(s => { s.edits[ref] = doc; });
     queueWrite(ref, doc);
   }
 
   function statusOf(ref: string): Status {
-    const e = live.edits[ref];
-    if (!e) return "untouched";
-    const c = live.commits[ref];
-    if (c && c.rev === e.rev) return "committed";
-    if (e.finalized && e.finalizedRev === e.rev) return "finalized";
     const seg = segOf(ref);
-    if (seg && e.text === seg.target.text) return "untouched";
-    return "rewritten";
+    const cur = editFor(ref);
+    if (cur?.stale) return "conflict";
+    if (cur) {
+      const e = cur.edit, c = live.commits[ref];
+      if (c && c.rev === e.rev) return "committed";
+      if (e.finalized && e.finalizedRev === e.rev) return "finalized";
+      if (!seg || e.text !== seg.target.text) return "rewritten";
+    }
+    const a = seg?.approval;
+    if (a) return a.current ? "committed" : "review";
+    return "untouched";
   }
   function reviewOf(ref: string): ReviewDoc | null {
-    const e = live.edits[ref], r = live.reviews[ref];
-    return e && r && r.rev === e.rev ? r : null;
+    const cur = editFor(ref), r = live.reviews[ref];
+    return cur && !cur.stale && r && r.rev === cur.edit.rev ? r : null;
   }
   const problemsOf = (ref: string) => {
     const seg = segOf(ref);
@@ -194,7 +218,7 @@ export function createAppState(platform: Platform) {
 
   return {
     platform, notifier, newId, manifest, unitId, bundle, lexIndex, loadError, dbState, live, saveErrors,
-    loadStatic, openUnit, subscribe, currentText, saveText, setFinalized, statusOf, reviewOf, problemsOf,
+    loadStatic, openUnit, subscribe, currentText, savedEditText, segOf, saveText, setFinalized, statusOf, reviewOf, problemsOf,
     threadsForUnit, messagesOf, awaitingClaude, sendMessage, createThread, setResolved, moveAnchor,
   };
 }

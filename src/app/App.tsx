@@ -12,7 +12,7 @@ export function App(props: { platform: Platform }) {
   onSettled(() => { app.subscribe(); app.loadStatic(); });
 
   const counts = createMemo(() => {
-    const c: Record<Status, number> = { untouched: 0, rewritten: 0, finalized: 0, committed: 0 };
+    const c: Record<Status, number> = { untouched: 0, rewritten: 0, finalized: 0, committed: 0, review: 0, conflict: 0 };
     for (const s of app.bundle()?.segments ?? []) c[app.statusOf(s.ref)]++;
     return c;
   });
@@ -34,16 +34,16 @@ export function App(props: { platform: Platform }) {
           <span class="chip chip-rewritten">{counts().rewritten} rewritten</span>
           <span class="chip chip-finalized">{counts().finalized} finalized</span>
           <span class="chip chip-committed">{counts().committed} committed</span>
+          <Show when={counts().review}><span class="chip chip-review">{counts().review} need re-review</span></Show>
+          <Show when={counts().conflict}><span class="chip chip-conflict">{counts().conflict} repo changed</span></Show>
         </div>
         <span class="spacer" />
         <label class="toggle"><input type="checkbox" checked={ui.ui.showHebrew} onChange={e => ui.setUi(s => { s.showHebrew = e.currentTarget.checked; })} /> Hebrew</label>
         <span class={["db", "db-" + app.dbState()]}>{dbLabel()}</span>
       </header>
-      <div class="cols">
-        <InfoColumn app={app} ui={ui} />
-        <EditorColumn app={app} ui={ui} />
-        <ChatColumn app={app} ui={ui} />
-      </div>
+      <InfoColumn app={app} ui={ui} />
+      <EditorColumn app={app} ui={ui} />
+      <ChatColumn app={app} ui={ui} />
     </div>
   );
 }

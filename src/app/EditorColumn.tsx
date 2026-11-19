@@ -5,7 +5,7 @@ import type { Ui } from "./ui";
 import { createSegmentEditor, type SegmentEditor } from "./segment-editor";
 import { wordDiff } from "../core/diff";
 
-const STATUS_LABEL = { untouched: "Untouched", rewritten: "Rewritten", finalized: "Finalized", committed: "Committed" } as const;
+const STATUS_LABEL = { untouched: "Untouched", rewritten: "Rewritten", finalized: "Finalized", committed: "Committed", review: "Needs re-review", conflict: "Repo changed" } as const;
 
 export function EditorColumn(props: { app: AppState; ui: Ui }) {
   return (
@@ -45,7 +45,9 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
   const threads = createMemo(() => props.app.threadsForUnit().filter(t => t.ref === ref() && !!t.resolved === (props.ui.ui.commentView === "resolved")));
   const hasSelection = createMemo(() => { const s = props.ui.ui.selection; return !!s && s.ref === ref() && s.to > s.from; });
   const heVisible = () => heOpen() ?? props.ui.ui.showHebrew;
-  const diff = createMemo(() => (showDiff() ? wordDiff(props.seg.target.text, text()) : null));
+  // Changes: against the text you approved when someone has changed it since; otherwise against the repo text
+  const diffBase = () => (status() === "review" && props.seg.approval?.approvedText ? props.seg.approval.approvedText.text : props.seg.target.text);
+  const diff = createMemo(() => (showDiff() ? wordDiff(diffBase(), text()) : null));
 
   onSettled(() => {
     const mount = () => {
@@ -98,7 +100,7 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
   );
   // text written elsewhere (another tab or device)
   createEffect(
-    () => ({ ed: editor(), remote: props.app.live.edits[props.seg.ref]?.text }),
+    () => ({ ed: editor(), remote: props.app.savedEditText(props.seg.ref) }),
     ({ ed, remote }) => { if (ed && remote != null) { ed.setText(remote); if (!ed.view.hasFocus) setText(remote); } },
   );
 
@@ -121,13 +123,31 @@ function SegmentCard(props: { app: AppState; ui: Ui; seg: Segment; dir: string }
         <button class={["btn-quiet", { on: heVisible() }]} onClick={() => setHeOpen(!heVisible())} title="Show or hide the Hebrew">Hebrew</button>
         <button class={["btn-quiet", { on: showDiff() }]} onClick={() => setShowDiff(!showDiff())}>Changes</button>
         <button class="btn-quiet" disabled={!hasSelection()} onClick={() => props.ui.startComment()} title="Select text in this paragraph first (Ctrl+Alt+M)">Comment</button>
-        <Show when={status() !== "committed"}>
+        <Show when={status() !== "committed" && status() !== "conflict"}>
           <button class={["btn-small", status() === "finalized" ? "btn-undo" : "btn-final"]} disabled={problems().length > 0}
-            onClick={() => props.app.setFinalized(props.seg.ref, status() !== "finalized")}>
-            {status() === "finalized" ? "Unfinalize" : "Finalize"}
+            onClick={() => props.app.setFinalized(props.seg.ref, status() !== "finalized")}
+            title={status() === "review" ? "Accept the text as it now stands" : ""}>
+            {status() === "finalized" ? "Unfinalize" : status() === "review" ? "Approve" : "Finalize"}
           </button>
         </Show>
       </div>
+      <Show when={status() === "review"}>
+        <div class="banner banner-review">
+          <b>Changed since you approved it.</b> Look at <button class="btn-link" onClick={() => setShowDiff(true)}>Changes</button>, then edit or <b>Approve</b> it as it stands.
+          <Show when={props.seg.approval?.changedBy?.length}>
+            <ul class="changers"><For each={props.seg.approval!.changedBy!}>{c => <li><code>{c.sha.slice(0, 7)}</code> {c.date}: {c.subject}</li>}</For></ul>
+          </Show>
+        </div>
+      </Show>
+      <Show when={status() === "conflict"}>
+        <div class="banner banner-conflict">
+          <b>The repository text changed while you were editing this paragraph.</b> Your draft is kept below; Changes shows it against the new repository text.
+          <div class="banner-actions">
+            <button class="btn-small" onClick={() => props.app.saveText(props.seg.ref, text())} title="Keep your draft; committing it will replace the new repository text">Keep my version</button>
+            <button class="btn-small" onClick={() => { editor()?.forceText(props.seg.target.text); setText(props.seg.target.text); props.app.saveText(props.seg.ref, props.seg.target.text); }} title="Discard your draft and start from the new repository text">Use repository text</button>
+          </div>
+        </div>
+      </Show>
       <Show when={heVisible() && props.seg.source}>
         <p class="src" dir={props.dir as "rtl" | "ltr"} lang="he">{props.seg.source}</p>
       </Show>

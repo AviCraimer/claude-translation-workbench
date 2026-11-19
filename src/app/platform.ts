@@ -35,7 +35,7 @@ declare global { interface Window { claude?: { use(name: string): Promise<any> }
 export async function connect(): Promise<Platform> {
   const c = window.claude;
   if (!c || typeof c.use !== "function") {
-    return { mode: "local", db: createMockDb(), user: null, comments: null };
+    return { mode: "local", db: createMockDb((window as any).__CTW_SEED), user: null, comments: null };
   }
   const [db, user, comments] = await Promise.all(["db", "user", "comments"].map(n => c.use(n).catch(() => null)));
   return { mode: "artifact", db, user, comments };

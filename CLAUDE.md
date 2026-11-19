@@ -77,12 +77,21 @@ The artifact comment tools can't see these relay threads ("not found"). Answer i
 `db_write` takes at most 50 ops per call and needs `ifVersion` for documents that already exist.
 
 ### Commit finalized paragraphs
-1. Attach the project repo with push access.
-2. Collect the edits where `finalized && finalizedRev == rev` and no commit has the same `rev`. Write `{"edits":[{ref,text,baseHash,rev}]}` to a file.
-3. Run `npx tsx tools/ctw.ts apply-edits FILE --repo <clone> --dry-run`, then again without `--dry-run`. A conflict means the repo paragraph changed since export; tell Avi in a thread and don't force it.
-4. Run the project's checks, then commit and push following the project repo's CLAUDE.md (for Pardes: `git pull --rebase` before pushing).
+1. Attach the project repo with push access, and pull.
+2. Collect the edits where `finalized && finalizedRev == rev`, `baseHash` equals the loaded bundle's `baseHash`, and no commit has the same `rev`. Write `{"edits":[{ref,text,baseHash,rev}]}` to a file.
+3. Run `npx tsx tools/ctw.ts apply-edits FILE --repo <clone> --dry-run`, then again without `--dry-run`. It writes changed text through `put_paragraphs.py` and records an approval for every applied paragraph in the project's status file (Pardes: `human_revision_status.json`), including approvals with no text change. A conflict means the repo paragraph changed since export: tell Avi in a thread and don't force it.
+4. Run the project's checks, then commit the text and the status file together, and push following the project repo's CLAUDE.md (for Pardes: `git pull --rebase` first). List the refs in the commit message.
 5. Write `commits/<key>` with `rev` and the commit `sha`.
 6. Re-export and republish the unit, so that later edits start from the committed text.
+
+### Approval tracking and re-review
+- **Approvals are recorded in the project repo**, not only in the database. In Pardes, `human_revision_status.json` stores the fingerprint of the exact text Avi approved. `tools/revision_check.py` lists approved paragraphs whose text has changed since, and the commits that changed them. Agents working in that repo are told to run it after changes.
+- **The adapter adds `approval` to each segment at export**: whether the text is still current, the approved text, and the commits that changed it. Re-export a unit after repo changes to pick these up.
+- **Statuses in the app:**
+  - **Committed:** approved and unchanged.
+  - **Needs re-review:** approved, then changed in the repo. Changes shows the diff against the approved text, with the commits that changed it. **Approve** accepts it as it stands; a commit then records only the approval.
+  - **Repo changed:** an uncommitted draft whose base text changed in the repo. Avi chooses **Keep my version** or **Use repository text**.
+- Edits that were committed against an older base are history: the app ignores them.
 
 ## Known pitfalls
 - Snapshot data from `db` is frozen. Clone it (`structuredClone`) before mutating.

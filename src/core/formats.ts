@@ -21,12 +21,21 @@ export interface LexHit {
   form: string; // the source-language form that matched
 }
 
+/** The translator's approval of a segment, as the project records it (optional). */
+export interface Approval {
+  approvedAt?: string;
+  current: boolean; // the project text still equals what was approved
+  approvedText?: EditableText; // when !current: the approved version, for showing what changed
+  changedBy?: { sha: string; date: string; subject: string }[]; // commits that changed it since
+}
+
 export interface Segment {
   ref: string; // project reference, e.g. "1:1:3"
   source: string; // plain source text (no markup)
   target: EditableText;
   baseHash: string; // fingerprint of the target HTML as exported
   lexHits: LexHit[]; // lexicon entries occurring in the source
+  approval?: Approval; // present once the translator has approved this segment
 }
 
 export interface ChapterBundle {
@@ -91,7 +100,8 @@ export interface EditRecord {
 }
 
 export interface ApplyReport {
-  applied: string[];
+  applied: string[]; // approved (text written if it changed, approval recorded either way)
+  changed?: string[]; // the subset whose text changed
   conflicts: { ref: string; reason: string }[];
   errors: { ref: string; reason: string }[];
 }

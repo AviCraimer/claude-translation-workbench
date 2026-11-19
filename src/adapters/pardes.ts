@@ -4,12 +4,12 @@
 // lexicon_translation.json + lexicon_reader.json, matcher.js (site matcher).
 // Writes go through the repo's own tools/put_paragraphs.py.
 
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import type { ProjectAdapter, ChapterBundle, LexiconBundle, LexEntry, EditRecord, ApplyReport, UnitInfo, LexHit } from "../core/formats";
+import type { ProjectAdapter, ChapterBundle, LexiconBundle, LexEntry, EditRecord, ApplyReport, UnitInfo, LexHit, Approval } from "../core/formats";
 import { toEditable, fromEditable, type MarkupRules } from "../core/markup";
 import { fingerprint } from "../core/hash";
 
@@ -83,6 +83,23 @@ export function createPardesAdapter(repo: string): ProjectAdapter {
     return createMatcher(FORM_MAP, RD.skipTokens || []);
   }
 
+  // Approval state from the repo's own checker (human_revision_status.json)
+  const STATUS = join(repo, "human_revision_status.json");
+  function approvals(unit: string): Record<string, any> {
+    if (!existsSync(join(repo, "tools/revision_check.py")) || !existsSync(STATUS)) return {};
+    const out = execFileSync("python3", [join(repo, "tools/revision_check.py"), "--json", "--commits", "--approved-text", "--unit", unit],
+      { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    return JSON.parse(out || "{}");
+  }
+  function toApproval(a: any): Approval | undefined {
+    if (!a) return undefined;
+    return {
+      approvedAt: a.approvedAt, current: !!a.current,
+      approvedText: !a.current && a.approvedHtml != null ? toEditable(a.approvedHtml, RULES) : undefined,
+      changedBy: a.changedBy?.map((c: any) => ({ sha: c.sha, date: c.date, subject: c.subject })),
+    };
+  }
+
   const parseUnit = (id: string) => {
     const [g, c] = id.split(":").map(n => parseInt(n, 10) - 1);
     if (!T.text[g] || !T.text[g][c]) throw new Error(`no unit ${id}`);
@@ -109,6 +126,7 @@ export function createPardesAdapter(repo: string): ProjectAdapter {
       const en: string[] = T.text[g][c];
       const he: string[] = HE.versions[0].text[g]?.[c] ?? [];
       const gate = T.gates[g] || {};
+      const appr = approvals(id);
       return {
         schema: "ctw.chapter/1",
         project: "pardes-rimmonim",
@@ -124,7 +142,8 @@ export function createPardesAdapter(repo: string): ProjectAdapter {
             const k = r.entryKey + "|" + r.form;
             if (!seen.has(k)) { seen.add(k); lexHits.push({ key: r.entryKey, form: r.form }); }
           }
-          return { ref: `${g + 1}:${c + 1}:${p + 1}`, source: plain(heHtml), target: toEditable(html, RULES), baseHash: fingerprint(html), lexHits };
+          const ref = `${g + 1}:${c + 1}:${p + 1}`;
+          return { ref, source: plain(heHtml), target: toEditable(html, RULES), baseHash: fingerprint(html), lexHits, approval: toApproval(appr[ref]) };
         }),
       };
     },
@@ -153,8 +172,10 @@ export function createPardesAdapter(repo: string): ProjectAdapter {
 
     applyEdits(edits: EditRecord[], opts = {}): ApplyReport {
       load(); // always against the current files
-      const report: ApplyReport = { applied: [], conflicts: [], errors: [] };
+      const report: ApplyReport = { applied: [], changed: [], conflicts: [], errors: [] };
       const out: Record<string, string> = {};
+      const approved: Record<string, { approvedHash: string; approvedAt: string; workbenchRev: number }> = {};
+      const now = new Date().toISOString();
       for (const ed of edits) {
         try {
           const [g, c, p] = ed.ref.split(":").map(n => parseInt(n, 10) - 1);
@@ -162,16 +183,26 @@ export function createPardesAdapter(repo: string): ProjectAdapter {
           if (cur === undefined) { report.errors.push({ ref: ed.ref, reason: "no such paragraph" }); continue; }
           if (fingerprint(cur) !== ed.baseHash) { report.conflicts.push({ ref: ed.ref, reason: "repo paragraph changed since export" }); continue; }
           const html = fromEditable(ed.text, toEditable(cur, RULES).tokens, RULES);
-          if (html !== cur) out[ed.ref] = html;
+          if (html !== cur) { out[ed.ref] = html; report.changed!.push(ed.ref); }
+          approved[ed.ref] = { approvedHash: fingerprint(html), approvedAt: now, workbenchRev: ed.rev };
           report.applied.push(ed.ref);
         } catch (err: any) {
           report.errors.push({ ref: ed.ref, reason: String(err.message || err) });
         }
       }
-      if (!opts.dryRun && Object.keys(out).length) {
-        const f = join(mkdtempSync(join(tmpdir(), "ctw-")), "edits.json");
-        writeFileSync(f, JSON.stringify(out), "utf8");
-        execFileSync("python3", [join(repo, "tools/put_paragraphs.py"), f, "--force"], { stdio: "inherit" });
+      if (!opts.dryRun) {
+        if (Object.keys(out).length) {
+          const f = join(mkdtempSync(join(tmpdir(), "ctw-")), "edits.json");
+          writeFileSync(f, JSON.stringify(out), "utf8");
+          execFileSync("python3", [join(repo, "tools/put_paragraphs.py"), f, "--force"], { stdio: "inherit" });
+        }
+        if (Object.keys(approved).length) {
+          const st = existsSync(STATUS) ? JSON.parse(readFileSync(STATUS, "utf8")) : { paragraphs: {} };
+          st.paragraphs = { ...(st.paragraphs || {}), ...approved };
+          const key = (r: string) => r.split(":").map(n => n.padStart(5, "0")).join(":");
+          st.paragraphs = Object.fromEntries(Object.entries(st.paragraphs).sort(([a], [b]) => key(a).localeCompare(key(b))));
+          writeFileSync(STATUS, JSON.stringify(st, null, 1) + "\n", "utf8");
+        }
       }
       return report;
     },

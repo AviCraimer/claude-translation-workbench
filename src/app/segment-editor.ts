@@ -140,6 +140,13 @@ export function createSegmentEditor(o: SegmentEditorOpts) {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
       applyingRemote = false;
     },
+    /** Replace the content unconditionally (the viewer chose this). */
+    forceText(text: string) {
+      if (view.state.doc.toString() === text) return;
+      applyingRemote = true;
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+      applyingRemote = false;
+    },
     select(from: number, to: number) {
       const len = view.state.doc.length;
       view.dispatch({ selection: { anchor: Math.min(from, len), head: Math.min(to, len) }, scrollIntoView: true });
