@@ -1,0 +1,35 @@
+{
+  "name": "claude-translation-workbench",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit -p .",
+    "ctw": "tsx tools/ctw.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AviCraimer/claude-translation-workbench.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AviCraimer/claude-translation-workbench/issues"
+  },
+  "homepage": "https://github.com/AviCraimer/claude-translation-workbench#readme",
+  "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@solidjs/web": "^2.0.3",
+    "solid-js": "^2.0.3"
+  },
+  "devDependencies": {
+    "@solidjs/vite-plugin": "^3.0.1",
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "type": "module",
+  "private": true
+}

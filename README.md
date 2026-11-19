@@ -8,4 +8,4 @@ A desktop editor for human revision of draft translations, with Claude reviewing
 
 Translation projects plug in through adapters that convert their own files into a neutral chapter, lexicon and edits format. The first adapter is for the Pardes Rimmonim Reader.
 
-Status: early setup.
+Status: v1, with Pardes Rimmonim Gate 1, Chapter 1 loaded. `CLAUDE.md` has the workflow and `FORMATS.md` the data formats.
