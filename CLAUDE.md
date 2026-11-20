@@ -95,5 +95,6 @@ The artifact comment tools can't see these relay threads ("not found"). Answer i
 
 ## Known pitfalls
 - Snapshot data from `db` is frozen. Clone it (`structuredClone`) before mutating.
+- Inside anything reactive (memos, effects, JSX), read the store before any plain-JS cache. `a ?? store.x` skips reading the store when `a` is set, so the computation stops tracking it. Finalize once looked dead after typing because of this.
 - In Solid 2.0, signal reads lag writes until the next microtask. Pass values along instead of re-reading a signal you just set.
 - `room.sendToClaudeSession` needs a chat open beside the artifact, and it failed on mobile. Wakes use `comments.sendToClaude` instead (see "Wakes from the page"), which reaches only the session that published the artifact. If a different chat takes over, it should republish the artifact so that wakes reach it.

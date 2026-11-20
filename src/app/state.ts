@@ -117,7 +117,10 @@ export function createAppState(platform: Platform) {
    *  - an older-base edit that was NOT committed is a conflict: the repo changed under it. */
   function editFor(ref: string): { edit: EditDoc; stale: boolean } | null {
     const seg = segOf(ref);
-    const e = pending.get(ref) ?? live.edits[ref];
+    // Read the store first, always: it is what makes callers (status memos) re-run when the edit changes.
+    // pending (a plain Map, not reactive) only fills the gap before the store has the doc.
+    const saved = live.edits[ref];
+    const e = saved ?? pending.get(ref);
     if (!e || !seg) return null;
     if (e.baseHash === seg.baseHash) return { edit: e, stale: false };
     const c = live.commits[ref];
@@ -135,7 +138,7 @@ export function createAppState(platform: Platform) {
     const c = live.commits[ref];
     return e.baseHash === seg.baseHash || !(c && c.rev === e.rev) ? e.text : null;
   };
-  const lastRev = (ref: string) => (pending.get(ref) ?? live.edits[ref])?.rev ?? 0;
+  const lastRev = (ref: string) => Math.max(live.edits[ref]?.rev ?? 0, pending.get(ref)?.rev ?? 0);
   function saveText(ref: string, text: string) {
     const seg = segOf(ref); if (!seg) return;
     const doc: EditDoc = { ref, unit: unitId()!, text, baseHash: seg.baseHash, rev: lastRev(ref) + 1, finalized: false, updatedAt: now() };
